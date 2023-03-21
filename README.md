@@ -78,7 +78,7 @@ cd fluentbitv2
 The application will deploy the otel demo v1.2.1
 ```shell
 chmod 777 deployment.sh
-./deployment.sh  --clustername "${NAME}" --dthost "${DT_TENANT_URL}" --dttoken "${DATA_INGEST_TOKEN}"
+./deployment.sh  --clustername "${NAME}" --dthost "${DT_TENANT_HOSTNAME}" --dttoken "${DATA_INGEST_TOKEN}"
 ```
 ### 5.Configure Fluentbit
 
@@ -103,7 +103,7 @@ Add the new port :
   protocol: TCP
   targetPort: otlphttp
 ```
-### 5. Fluentbit pipeline
+### 6. Fluentbit pipeline
 
 #### 1. Logs
 The current pipeline deployed is already configured to collect logs, transform the logs and send it to dynatrace.
