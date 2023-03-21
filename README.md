@@ -103,3 +103,158 @@ Add the new port :
   protocol: TCP
   targetPort: otlphttp
 ```
+### 5. Fluentbit pipeline
+
+#### 1. Logs
+The current pipeline deployed is already configured to collect logs, transform the logs and send it to dynatrace.
+
+Let's have a look at this pipeline
+```shell
+cat fluentbit/fluent-bit_initial.yaml
+```
+
+#### 2. Add Expect after renaming the kubernetes metada
+
+To validate our pipeline step we can utilze the `Expect` filter.
+In our case we want to make sure that the k8s.pod.name key exists in our stream :
+```yaml
+    [FILTER]
+       Name          expect
+       Match         kube.*
+       key_exists    k8s.pod.name
+       key_val_is_not_null k8s.namespace.name
+       action warn
+```
+
+Let's modify our current pipeline  by adding our expect step after :
+```yaml
+[FILTER]
+  Name modify
+  Match kube.*
+  ...
+```
+To edit our current pipeline :
+```shell
+vi fluentbit/fluent-bit_initial.yaml
+```
+After applying our changes , let's apply the new version of the pipeline and restart the fluentbit agents :
+```shell
+kubectl apply -f fluentbit/fluent-bit_initial.yaml -n fluentbit
+kubectl  rollout restart ds fluent-bit -n fluentbit
+```
+
+
+#### 3. Let's add metrics
+
+##### Collect host metrics with the node exporter plugin
+Fluentbit provides a Node exporter within the fluentbit agents.
+let's use it to collect metrics in our current pipeline :
+```yaml
+[INPUT]
+ name node_exporter_metrics
+ tag  otel.node
+ scrape_interval 2
+```
+
+Now that we have a input plugin collecting metrics we need to also add output plugins for our metrics:
+```yaml
+[OUTPUT]
+name            prometheus_exporter
+match           otel.*
+host            0.0.0.0
+port            2021
+add_label      k8s.cluster.name CLUSTER_NAME_TO_REPLACE
+```
+
+Let's modify our current pipeline and look at the port 2021 of our fluentbit agent
+```shell
+vi fluentbit/fluent-bit_initial.yaml
+```
+And update the pipeline of our agents :
+```shell
+kubectl apply -f fluentbit/fluent-bit_initial.yaml -n fluentbit
+kubectl  rollout restart ds fluent-bit -n fluentbit
+```
+
+Now let's have a look a the metrics produced by our agent:
+```shell
+kubectl get pods -n fluenbit
+```
+select one of the pod and apply the following command: 
+```shell
+kubectl port-forward <fluentbit pod id> -n fluentbit 2021:2021
+```
+open you browser and opent the page http://localhost:2021/metrics
+
+
+#### 4. Let's scrape Prometheus metrics
+In the cluster the Prometheus operator has been deployed.
+It means that we can collect the metrics produced by the kubestate metrics exporter.
+```yaml
+    [INPUT]
+      name prometheus_scrape
+      host prometheus-kube-state-metrics.default.svc
+      port 8080
+      tag otel.metrics
+      metrics_path /metrics
+      scrape_interval 10s
+```
+Let's modify our current pipeline and look at the port 2021 of our fluentbit agent
+```shell
+vi fluentbit/fluent-bit_initial.yaml
+```
+And update the pipeline of our agents :
+```shell
+kubectl apply -f fluentbit/fluent-bit_initial.yaml -n fluentbit
+kubectl  rollout restart ds fluent-bit -n fluentbit
+```
+#### 5. Let's add the fluentbit metrics
+```yaml
+  [INPUT]
+    name fluentbit_metrics
+    tag  otel.fluent
+    scrape_interval 2
+```
+Let's modify our current pipeline and look at the port 2021 of our fluentbit agent
+```shell
+vi fluentbit/fluent-bit_initial.yaml
+```
+And update the pipeline of our agents :
+```shell
+kubectl apply -f fluentbit/fluent-bit_initial.yaml -n fluentbit
+kubectl  rollout restart ds fluent-bit -n fluentbit
+```
+
+#### 6. Let's add OpenTelemetry
+```yaml
+     [INPUT]
+       name opentelemetry
+       listen 0.0.0.0
+       port 4318
+       tag otel.otel
+```
+and add the output openTelemetry to send metrics and traces using the output OpenTelemtry:
+```yaml
+[OUTPUT]
+  Name opentelemetry
+  Host  ${DT_TENANT_URL}
+  Port  443
+  Match otel.*
+  Metrics_uri  /api/v2/otlp/v1/metrics
+  Traces_uri  /api/v2/otlp/v1/traces
+  Logs_uri   /api/v2/otlp/v1/logs
+  Log_response_payload True
+  Tls On
+  Tls.verify Off
+  header Authorization Api-Token ${DATA_INGEST_TOKEN}
+  header Content-type application/x-protobuf
+```
+Let's modify our current pipeline and look at the port 2021 of our fluentbit agent
+```shell
+vi fluentbit/fluent-bit_initial.yaml
+```
+And update the pipeline of our agents :
+```shell
+kubectl apply -f fluentbit/fluent-bit_initial.yaml -n fluentbit
+kubectl  rollout restart ds fluent-bit -n fluentbit
+```

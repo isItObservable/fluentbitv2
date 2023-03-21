@@ -35,7 +35,7 @@ spec:
         loglevel: debug
 
       otlphttp:
-        endpoint: http://fluent-bit.fluenbit.svc:4318
+        endpoint: http://fluent-bit.fluentbit.svc:4318
         compression: none
         tls:
           insecure: true

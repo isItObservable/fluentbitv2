@@ -98,13 +98,19 @@ kubectl apply -f https://github.com/open-telemetry/opentelemetry-operator/releas
 CLUSTERID=$(kubectl get namespace kube-system -o jsonpath='{.metadata.uid}')
 sed -i "s,CLUSTER_ID_TOREPLACE,$CLUSTERID," fluentbit/fluent-bit_cml.yaml
 sed -i "s,CLUSTER_NAME_TO_REPLACE,$CLUSTERNAME," fluentbit/fluent-bit_cml.yaml
-
+sed -i "s,CLUSTER_ID_TOREPLACE,$CLUSTERID," fluentbit/fluent-bit-metrics.yaml
+sed -i "s,CLUSTER_NAME_TO_REPLACE,$CLUSTERNAME," fluentbit/fluent-bit-metrics.yaml
 #Deploy the OpenTelemetry Collector
 echo "Configuring Fluentbit pipeline"
 ##update the collector pipeline
+sed -i "s,DT_TOKEN_TO_REPLACE,$DTTOKEN," fluentbit/fluent-bit_initial.yaml
+sed -i "s,DT_URL_TO_REPLACE,$DTURL," fluentbit/fluent-bit_initial.yaml
+sed -i "s,DT_TOKEN_TO_REPLACE,$DTTOKEN," fluentbit/fluent-bit_cml_expect.yaml
+sed -i "s,DT_URL_TO_REPLACE,$DTURL," fluentbit/fluent-bit_cml_expect.yaml
+sed -i "s,DT_TOKEN_TO_REPLACE,$DTTOKEN," fluentbit/fluent-bit-metrics.yaml
+sed -i "s,DT_URL_TO_REPLACE,$DTURL," fluentbit/fluent-bit-metrics.yaml
 sed -i "s,DT_TOKEN_TO_REPLACE,$DTTOKEN," fluentbit/fluent-bit_cml.yaml
 sed -i "s,DT_URL_TO_REPLACE,$DTURL," fluentbit/fluent-bit_cml.yaml
-
 
 #install prometheus operator
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
@@ -113,14 +119,13 @@ helm install prometheus prometheus-community/kube-prometheus-stack  --set grafan
 kubectl wait pod --namespace default -l "release=prometheus" --for=condition=Ready --timeout=2m
 
 PROMETHEUS_kubeStateMetrics=$(kubectl get svc -l app.kubernetes.io/name=kube-state-metrics -o jsonpath="{.items[0].metadata.name}")
+sed -i "s,KUBESTATEMETRICS_SERVER_TO_REPLACE,$PROMETHEUS_kubeStateMetrics," fluentbit/fluent-bit-metrics.yaml
 sed -i "s,KUBESTATEMETRICS_SERVER_TO_REPLACE,$PROMETHEUS_kubeStateMetrics," fluentbit/fluent-bit_cml.yaml
-PROMETHEUS_NODEEXPORTER=$(kubectl get svc -l app.kubernetes.io/name=prometheus-node-exporter -o jsonpath="{.items[0].metadata.name}")
-sed -i "s,NODEEXPORTER_SERVER_TO_REPLACE,$PROMETHEUS_NODEEXPORTER," fluentbit/fluent-bit_cml.yaml
 
 #Install fluenbit
 helm repo add fluent https://fluent.github.io/helm-charts
 helm upgrade --install fluent-bit fluent/fluent-bit --namespace fluentbit --create-namespace
-kubectl apply -f fluentbit/fluent-bit_cml.yaml -n fluentbit
+kubectl apply -f fluentbit/fluent-bit_initial.yaml -n fluentbit
 kubectl rollout restart ds fluent-bit -n fluentbit
 # Echo environ*
 #deploy demo application

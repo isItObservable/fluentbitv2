@@ -9,13 +9,18 @@ metadata:
     app.kubernetes.io/version: 2.0.8
     helm.sh/chart: fluent-bit-0.22.0
 data:
+  stream_processor.conf: |
+      [STREAM_TASK]
+         Name   otel_logs
+         Exec   CREATE STREAM otel_logs_count WITH (tag='otel.count') AS SELECT kubernetes_pod_name,COUNT(*) from TAG:'modify.*' WINDOW TUMBLING (5 SECOND)  WHERE kubernetes_namespace_name='otel-demo' GROUP BY kubernetes_pod_name ;
+
   custom_parsers.conf: |
-    [PARSER]
-        Name docker_no_time
-        Format json
-        Time_Keep Off
-        Time_Key time
-        Time_Format %Y-%m-%dT%H:%M:%S.%L
+      [PARSER]
+         Name docker_no_time
+         Format json
+         Time_Keep Off
+         Time_Key time
+         Time_Format %Y-%m-%dT%H:%M:%S.%L
   fluent-bit.conf: |
       [SERVICE]
          Daemon Off
@@ -27,7 +32,7 @@ data:
          HTTP_Listen 0.0.0.0
          HTTP_Port 2020
          Health_Check On
-
+         Streams_File stream_processor.conf
       [INPUT]
          Name tail
          Path  /var/log/containers/*.log
@@ -46,14 +51,14 @@ data:
          tag otel.otel
       [INPUT]
          name prometheus_scrape
-         host NODEEXPORTER_SERVER_TO_REPLACE.default.svc
+         host prometheus-prometheus-node-exporter.default.svc
          metrics_path /metrics
          tag  otel.node
          port 9100
          scrape_interval 2
       [INPUT]
          name prometheus_scrape
-         host KUBESTATEMETRICS_SERVER_TO_REPLACE.default.svc
+         host prometheus-kube-state-metrics.default.svc
          port 8080
          tag otel.metrics
          metrics_path /metrics
@@ -81,6 +86,11 @@ data:
          Operation lift
          Nested_under kubernetes_labels
       [FILTER]
+         Name          rewrite_tag
+         Match         kube.*
+         Rule          $kubernetes_namespace_name ^(([a-z0-9A-Z]+)-*([a-z0-9A-Z]*))$ modify.$kubernetes_namespace_name true
+         Emitter_Name  re_emitted
+      [FILTER]
          Name modify
          Match kube.*
          Rename log content
@@ -96,6 +106,7 @@ data:
          Remove kubernetes_container_hash
          Add k8s.cluster.name CLUSTER_NAME_TO_REPLACE
          Add dt.kubernetes.config.id CLUSTER_ID_TOREPLACE
+
       [FILTER]
          Name     throttle
          Match    *
@@ -119,17 +130,7 @@ data:
          tls On
          tls.verify Off
          Retry_Limit false
-      [OUTPUT]
-         Name opentelemetry
-         Host  oteld-collector.default.svc
-         Port  4318
-         Match kube.*
-         Metrics_uri /v1/metrics
-         Traces_uri  /v1/traces
-         Logs_uri    /v1/logs
-         Log_response_payload True
-         Tls Off
-         header Content-type application/x-protobuf
+
       [OUTPUT]
          Name opentelemetry
          Host  DT_URL_TO_REPLACE
@@ -145,4 +146,5 @@ data:
          header Content-type application/x-protobuf
       [OUTPUT]
          Name stdout
-         Match otel.*
+         Match *
+
