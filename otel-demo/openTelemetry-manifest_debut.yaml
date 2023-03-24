@@ -35,11 +35,15 @@ spec:
     exporters:
       logging:
         verbosity: detailed
-
+      otlphttp:
+        endpoint: http://fluent-bit.fluentbit.svc:4318
+        compression: none
+        tls:
+          insecure: true
     service:
       pipelines:
         logs:
           receivers: [otlp]
           processors: [memory_limiter,batch]
-          exporters: [logging]
+          exporters: [otlhttp]
 
